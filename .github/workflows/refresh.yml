@@ -1,0 +1,32 @@
+# The registries change. IANA adds enhanced status codes and Microsoft edits its
+# NDR reference without announcing either, so this rebuilds from the published
+# sources every week and commits anything that moved.
+name: Refresh the registry
+
+on:
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: cp registry.json /tmp/before.json
+      - run: python3 export_registry.py --fetch
+      - name: Commit if anything changed
+        run: |
+          if git diff --quiet; then echo "No change."; exit 0; fi
+          before=$(python3 -c "import json;d=json.load(open('/tmp/before.json'));print(sum(len(d[k]) for k in ('basic','enhanced','microsoft','provider')))")
+          after=$(python3 -c "import json;d=json.load(open('registry.json'));print(sum(len(d[k]) for k in ('basic','enhanced','microsoft','provider')))")
+          git config user.name  "smtp-responses"
+          git config user.email "singhrastu@gmail.com"
+          git add -A
+          git commit -m "Refresh the registry: ${before} -> ${after} responses"
+          git push
